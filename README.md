@@ -30,7 +30,7 @@ is bf16.
 
 ## Use
 
-pufferlax doesn't ship any environment — you register the module that exposes a
+pufferlax doesn't ship any environment, you register the module that exposes a
 compiled PufferLib-Ocean `_C` extension, then `make` it:
 
 ```python
