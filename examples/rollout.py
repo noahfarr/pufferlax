@@ -1,12 +1,14 @@
 import functools
+import os
+import time
 
 import jax
-import jax.numpy as jnp
+import tqdx.rich
 
 import pufferlax
 
 pufferlax.register("craftax", "pufferlib")
-env, params = pufferlax.make("craftax", batch_shape=(64,), num_threads=8)
+env, params = pufferlax.make("craftax", batch_shape=(8192,), num_threads=os.cpu_count())
 
 
 @functools.partial(jax.jit, static_argnums=(1,))
@@ -22,9 +24,17 @@ def rollout(key, steps):
         obs, state, reward, done, _ = jax.vmap(env.step)(step_keys, state, actions)
         return (obs, state, key), (reward, done)
 
-    _, (rewards, dones) = jax.lax.scan(step, (obs, state, key), None, length=steps)
+    _, (rewards, dones) = tqdx.rich.scan(step, (obs, state, key), None, length=steps)
     return rewards, dones
 
 
-rewards, dones = rollout(jax.random.PRNGKey(0), 512)
-print("summed reward:", float(rewards.sum()), "episodes:", int(dones.sum()))
+steps = 2048
+key = jax.random.PRNGKey(0)
+jax.block_until_ready(rollout(key, steps))
+
+start = time.perf_counter()
+rewards, dones = jax.block_until_ready(rollout(key, steps))
+elapsed = time.perf_counter() - start
+
+total_steps = env.num_envs * steps
+print(f"SPS: {total_steps / elapsed:,.0f} ({total_steps:,} steps in {elapsed:.3f}s)")

@@ -12,6 +12,11 @@ dependencies = [
     "pufferlib",
 ]
 
+[project.optional-dependencies]
+examples = [
+    "tqdx>=0.1.5",
+]
+
 [tool.uv.sources]
 pufferlib = { path = "vendor/pufferlib", editable = true }
 
