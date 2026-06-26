@@ -30,10 +30,10 @@ def rollout(key, steps):
 
 steps = 2048
 key = jax.random.PRNGKey(0)
-jax.block_until_ready(rollout(key, steps))
+rollout = rollout.lower(key, steps).compile()
 
 start = time.perf_counter()
-rewards, dones = jax.block_until_ready(rollout(key, steps))
+rewards, dones = jax.block_until_ready(rollout(key))
 elapsed = time.perf_counter() - start
 
 total_steps = env.num_envs * steps
