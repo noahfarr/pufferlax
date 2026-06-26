@@ -5,8 +5,16 @@ import jax.numpy as jnp
 
 import pufferlax
 
-pufferlax.register("craftax", "pufferlib")
-env, params = pufferlax.make("craftax", batch_shape=(64,), num_threads=8)
+pufferlax.register("breakout", "pufferlib")
+env, params = pufferlax.make(
+    "breakout",
+    batch_shape=(64,),
+    num_threads=8,
+    frameskip=4, width=576, height=330,
+    paddle_width=62, paddle_height=8, ball_width=32, ball_height=32,
+    brick_width=32, brick_height=12, brick_rows=6, brick_cols=18,
+    initial_ball_speed=256, max_ball_speed=448, paddle_speed=620, continuous=0,
+)
 
 
 @functools.partial(jax.jit, static_argnums=(1,))

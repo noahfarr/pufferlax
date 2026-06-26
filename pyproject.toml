@@ -12,13 +12,6 @@ dependencies = [
     "pufferlib",
 ]
 
-[project.optional-dependencies]
-examples = [
-    "distrax>=0.1.9",
-    "flax>=0.12.7",
-    "optax>=0.2.8",
-]
-
 [tool.uv.sources]
 pufferlib = { path = "vendor/pufferlib", editable = true }
 

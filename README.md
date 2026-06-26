@@ -60,20 +60,8 @@ obs, state, reward, done, info = jax.vmap(env.step)(
 Extra keyword args to `make` are forwarded to the C env as its config; the keys
 an Ocean env needs are listed in pufferlib's `config/<env>.ini`.
 
-See [`examples/`](examples/) for more:
-
-- [`rollout.py`](examples/rollout.py) — a `jit`+`lax.scan` random rollout.
-- [`ppo_breakout.py`](examples/ppo_breakout.py) — end-to-end PPO (adapted from
-  [purejaxrl](https://github.com/luchris429/purejaxrl)) training on a pufferlax
-  env pool, reporting episodic return and steps-per-second.
-
-The PPO example needs a few extra packages (`distrax`, `flax`, `optax`); install
-them with the `examples` extra, then run it:
-
-```bash
-uv sync --extra examples
-uv run python examples/ppo_breakout.py
-```
+See [`examples/rollout.py`](examples/rollout.py) for a `jit`+`lax.scan` random
+rollout.
 
 ## How it works
 
