@@ -11,7 +11,12 @@ import tqdx.rich
 import pufferlax
 
 pufferlax.register("craftax", "pufferlib")
-env, params = pufferlax.make("craftax", batch_shape=(8192,), num_threads=os.cpu_count())
+env, params = pufferlax.make(
+    "craftax",
+    batch_shape=(4096,),
+    num_threads=os.cpu_count(),
+    reset_pool_size=1024,
+)
 
 
 @functools.partial(jax.jit, static_argnums=(1,))
