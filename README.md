@@ -20,7 +20,6 @@ git clone --recurse-submodules git@github.com:noahfarr/pufferlax.git
 cd pufferlax
 uv sync --group build
 
-# build the C extension for one env (CPU/float32 backend, no CUDA needed):
 cd vendor/pufferlib && uv run --project .. bash build.sh craftax --cpu
 ```
 
@@ -38,7 +37,6 @@ compiled PufferLib-Ocean `_C` extension, then `make` it:
 import jax
 import pufferlax
 
-# map an env name to the package exposing the compiled `_C` (PufferLib 4.x: "pufferlib")
 pufferlax.register("craftax", "pufferlib")
 
 env, params = pufferlax.make("craftax", batch_shape=(8,), num_threads=4)
@@ -51,7 +49,20 @@ obs, state, reward, done, info = jax.vmap(env.step)(
 )
 ```
 
-See [`examples/`](examples/) for a random rollout and a `jit`+`lax.scan` rollout.
+See [`examples/`](examples/) for more:
+
+- [`rollout.py`](examples/rollout.py) — a `jit`+`lax.scan` random rollout.
+- [`ppo.py`](examples/ppo.py) — end-to-end PPO (adapted from
+  [purejaxrl](https://github.com/luchris429/purejaxrl)) training on a pufferlax
+  env pool, reporting episodic return and steps-per-second.
+
+The PPO example needs a few extra packages (`distrax`, `flax`, `optax`); install
+them with the `examples` dependency group, then run it:
+
+```bash
+uv sync --group examples
+uv run python examples/ppo.py
+```
 
 ## How it works
 
@@ -67,7 +78,7 @@ See [`examples/`](examples/) for a random rollout and a `jit`+`lax.scan` rollout
 - **Single discrete action dimension.** `action_space` is a flat `Discrete`; the
   first entry of the env's `act_sizes` is used.
 - **Shared pool / RNG.** A multi-axis `batch_shape` is one C pool sharing one
-  RNG, so sub-batches are not independently seeded (a warning is emitted).
+  RNG, so sub-batches are not independently seeded.
 - **float32 observations.** Observations are read as a flat `float32` vector.
 - **ABI.** Targets the PufferLib-Ocean vec-env ABI (`create_vec`, `obs_ptr`,
   `rewards_ptr`, `terminals_ptr`, `act_sizes`, `obs_size`, `reset`, `cpu_step`).

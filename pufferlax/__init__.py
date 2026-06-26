@@ -1,9 +1,8 @@
-from .environment import PufferlaxEnv, PufferlaxParams, PufferlaxState, load_C, make, register
+from .environment import PufferLibEnv, PufferLibState, load_C, make, register
 
 __all__ = [
-    "PufferlaxEnv",
-    "PufferlaxState",
-    "PufferlaxParams",
+    "PufferLibEnv",
+    "PufferLibState",
     "make",
     "register",
     "load_C",

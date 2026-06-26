@@ -16,6 +16,11 @@ pufferlib = { path = "vendor/pufferlib", editable = true }
 
 [dependency-groups]
 build = ["pybind11"]
+examples = [
+    "distrax>=0.1.9",
+    "flax>=0.12.7",
+    "optax>=0.2.8",
+]
 
 [build-system]
 requires = ["hatchling"]

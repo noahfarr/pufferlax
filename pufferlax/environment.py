@@ -28,16 +28,11 @@ def load_C(env_name: str):
 
 
 @struct.dataclass
-class PufferlaxState(environment.EnvState):
+class PufferLibState(environment.EnvState):
     time: int = 0
 
 
-@struct.dataclass
-class PufferlaxParams(environment.EnvParams):
-    pass
-
-
-class PufferlaxEnv(environment.Environment):
+class PufferLibEnv(environment.Environment):
     def __init__(self, C, batch_shape=(1,), num_threads: int = 16, **env_kwargs):
         super().__init__()
         self._C = C
@@ -47,7 +42,7 @@ class PufferlaxEnv(environment.Environment):
 
         if len(self.batch_shape) > 1:
             warnings.warn(
-                f"PufferlaxEnv batch_shape={self.batch_shape} treats leading axes as "
+                f"PufferLibEnv batch_shape={self.batch_shape} treats leading axes as "
                 "one env pool sharing a single C vec env and its RNG, so "
                 "sub-batches are not independently seeded.",
                 stacklevel=2,
@@ -91,8 +86,8 @@ class PufferlaxEnv(environment.Environment):
         return self._num_actions
 
     @property
-    def default_params(self) -> PufferlaxParams:
-        return PufferlaxParams()
+    def default_params(self) -> None:
+        return None
 
     def observation_space(self, params=None) -> spaces.Box:
         return spaces.Box(
@@ -122,7 +117,7 @@ class PufferlaxEnv(environment.Environment):
             key,
             vmap_method="broadcast_all",
         )
-        return obs, PufferlaxState(time=0)
+        return obs, PufferLibState(time=0)
 
     def step_env(self, key, state, action, params=None):
         def _step(action):
@@ -147,7 +142,7 @@ class PufferlaxEnv(environment.Environment):
         obs, reward, done = jax.pure_callback(
             _step, result_specs, action, vmap_method="broadcast_all"
         )
-        return obs, PufferlaxState(time=state.time + 1), reward, done, {}
+        return obs, PufferLibState(time=state.time + 1), reward, done, {}
 
 
 def make(
@@ -159,5 +154,5 @@ def make(
             f"{REGISTRY[env_name]}._C is compiled for {C.env_name!r}, "
             f"expected {env_name!r}."
         )
-    env = PufferlaxEnv(C, batch_shape=batch_shape, num_threads=num_threads, **env_kwargs)
+    env = PufferLibEnv(C, batch_shape=batch_shape, num_threads=num_threads, **env_kwargs)
     return env, env.default_params

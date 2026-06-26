@@ -1,17 +1,19 @@
 # Implementation from https://github.com/luchris429/purejaxrl/blob/main/purejaxrl/ppo.py
 
-from typing import Any, NamedTuple, Sequence
+import time
+from typing import NamedTuple, Sequence
 
 import distrax
 import flax.linen as nn
-import gymnax
 import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
 from flax.linen.initializers import constant, orthogonal
 from flax.training.train_state import TrainState
-from wrappers import FlattenObservationWrapper, LogWrapper
+from gymnax.wrappers.purerl import LogWrapper
+
+import pufferlax
 
 
 class ActorCritic(nn.Module):
@@ -69,8 +71,12 @@ def make_train(config):
     config["MINIBATCH_SIZE"] = (
         config["NUM_ENVS"] * config["NUM_STEPS"] // config["NUM_MINIBATCHES"]
     )
-    env, env_params = gymnax.make(config["ENV_NAME"])
-    env = FlattenObservationWrapper(env)
+    pufferlax.register(config["ENV_NAME"], config["MODULE_PATH"])
+    env, env_params = pufferlax.make(
+        config["ENV_NAME"],
+        batch_shape=(config["NUM_ENVS"],),
+        num_threads=config["NUM_THREADS"],
+    )
     env = LogWrapper(env)
 
     def linear_schedule(count):
@@ -83,9 +89,7 @@ def make_train(config):
 
     def train(rng):
         # INIT NETWORK
-        network = ActorCritic(
-            env.action_space(env_params).n, activation=config["ACTIVATION"]
-        )
+        network = ActorCritic(env.num_actions, activation=config["ACTIVATION"])
         rng, _rng = jax.random.split(rng)
         init_x = jnp.zeros(env.observation_space(env_params).shape)
         network_params = network.init(_rng, init_x)
@@ -262,13 +266,8 @@ def make_train(config):
                     return_values = info["returned_episode_returns"][
                         info["returned_episode"]
                     ]
-                    timesteps = (
-                        info["timestep"][info["returned_episode"]] * config["NUM_ENVS"]
-                    )
-                    for t in range(len(timesteps)):
-                        print(
-                            f"global step={timesteps[t]}, episodic return={return_values[t]}"
-                        )
+                    for t in range(len(return_values)):
+                        print(f"episodic return={return_values[t]}")
 
                 jax.debug.callback(callback, metric)
 
@@ -300,10 +299,20 @@ if __name__ == "__main__":
         "VF_COEF": 0.5,
         "MAX_GRAD_NORM": 0.5,
         "ACTIVATION": "tanh",
-        "ENV_NAME": "CartPole-v1",
+        "ENV_NAME": "craftax",
+        "MODULE_PATH": "pufferlib",
+        "NUM_THREADS": 4,
         "ANNEAL_LR": True,
         "DEBUG": True,
     }
     rng = jax.random.PRNGKey(30)
     train_jit = jax.jit(make_train(config))
-    out = train_jit(rng)
+
+    out = jax.block_until_ready(train_jit(rng))
+
+    start = time.perf_counter()
+    out = jax.block_until_ready(train_jit(rng))
+    elapsed = time.perf_counter() - start
+
+    total_steps = config["NUM_UPDATES"] * config["NUM_STEPS"] * config["NUM_ENVS"]
+    print(f"SPS: {total_steps / elapsed:,.0f} ({total_steps:,} steps in {elapsed:.2f}s)")
