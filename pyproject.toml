@@ -1,0 +1,25 @@
+[project]
+name = "pufferlax"
+version = "0.1.0"
+description = "A JAX/gymnax wrapper for PufferLib-Ocean (C) vectorized environments"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "jax>=0.4.34",
+    "numpy",
+    "gymnax>=0.0.8",
+    "pufferlib",
+]
+
+[tool.uv.sources]
+pufferlib = { path = "vendor/pufferlib", editable = true }
+
+[dependency-groups]
+build = ["pybind11"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["pufferlax"]
