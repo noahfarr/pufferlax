@@ -1,5 +1,6 @@
-# Implementation from https://github.com/luchris429/purejaxrl/blob/main/purejaxrl/ppo.py
+# Implementation adapted from https://github.com/luchris429/purejaxrl/blob/main/purejaxrl/ppo.py
 
+import os
 import time
 from typing import NamedTuple, Sequence
 
@@ -76,6 +77,7 @@ def make_train(config):
         config["ENV_NAME"],
         batch_shape=(config["NUM_ENVS"],),
         num_threads=config["NUM_THREADS"],
+        **config.get("ENV_KWARGS", {}),
     )
     env = LogWrapper(env)
 
@@ -96,12 +98,22 @@ def make_train(config):
         if config["ANNEAL_LR"]:
             tx = optax.chain(
                 optax.clip_by_global_norm(config["MAX_GRAD_NORM"]),
-                optax.adam(learning_rate=linear_schedule, eps=1e-5),
+                optax.adam(
+                    learning_rate=linear_schedule,
+                    b1=config["BETA1"],
+                    b2=config["BETA2"],
+                    eps=config["EPS"],
+                ),
             )
         else:
             tx = optax.chain(
                 optax.clip_by_global_norm(config["MAX_GRAD_NORM"]),
-                optax.adam(config["LR"], eps=1e-5),
+                optax.adam(
+                    config["LR"],
+                    b1=config["BETA1"],
+                    b2=config["BETA2"],
+                    eps=config["EPS"],
+                ),
             )
         train_state = TrainState.create(
             apply_fn=network.apply,
@@ -115,6 +127,8 @@ def make_train(config):
         obsv, env_state = jax.vmap(env.reset, in_axes=(0, None))(reset_rng, env_params)
 
         # TRAIN LOOP
+        sps_state = {"prev": None}
+
         def _update_step(runner_state, unused):
             # COLLECT TRAJECTORIES
             def _env_step(runner_state, unused):
@@ -263,11 +277,20 @@ def make_train(config):
             if config.get("DEBUG"):
 
                 def callback(info):
-                    return_values = info["returned_episode_returns"][
+                    now = time.perf_counter()
+                    prev = sps_state["prev"]
+                    sps_state["prev"] = now
+                    returns = info["returned_episode_returns"][
                         info["returned_episode"]
                     ]
-                    for t in range(len(return_values)):
-                        print(f"episodic return={return_values[t]}")
+                    mean_return = returns.mean() if returns.size else float("nan")
+                    suffix = ""
+                    if prev is not None:
+                        sps = config["NUM_STEPS"] * config["NUM_ENVS"] / (now - prev)
+                        suffix = f", SPS={sps:,.0f}"
+                    print(
+                        f"episodes={returns.size}, mean return={mean_return:.2f}{suffix}"
+                    )
 
                 jax.debug.callback(callback, metric)
 
@@ -286,33 +309,45 @@ def make_train(config):
 
 if __name__ == "__main__":
     config = {
-        "LR": 2.5e-4,
-        "NUM_ENVS": 4,
-        "NUM_STEPS": 128,
-        "TOTAL_TIMESTEPS": 5e5,
+        "LR": 0.1,
+        "NUM_ENVS": 4096,
+        "NUM_STEPS": 64,
+        "TOTAL_TIMESTEPS": 94_000_000,
         "UPDATE_EPOCHS": 4,
         "NUM_MINIBATCHES": 4,
-        "GAMMA": 0.99,
-        "GAE_LAMBDA": 0.95,
-        "CLIP_EPS": 0.2,
-        "ENT_COEF": 0.01,
-        "VF_COEF": 0.5,
-        "MAX_GRAD_NORM": 0.5,
+        "GAMMA": 0.9721246598992744,
+        "GAE_LAMBDA": 0.948721675814334,
+        "CLIP_EPS": 0.6746497927896418,
+        "ENT_COEF": 0.0033240721522812535,
+        "VF_COEF": 1.2195502588297364,
+        "MAX_GRAD_NORM": 1.8109182724544075,
+        "BETA1": 0.7279714073125252,
+        "BETA2": 0.9986265112492152,
+        "EPS": 0.00008339460257113628,
         "ACTIVATION": "tanh",
-        "ENV_NAME": "craftax",
+        "ENV_NAME": "breakout",
         "MODULE_PATH": "pufferlib",
-        "NUM_THREADS": 4,
+        "ENV_KWARGS": {
+            "frameskip": 4,
+            "width": 576,
+            "height": 330,
+            "paddle_width": 62,
+            "paddle_height": 8,
+            "ball_width": 32,
+            "ball_height": 32,
+            "brick_width": 32,
+            "brick_height": 12,
+            "brick_rows": 6,
+            "brick_cols": 18,
+            "initial_ball_speed": 256,
+            "max_ball_speed": 448,
+            "paddle_speed": 620,
+            "continuous": 0,
+        },
+        "NUM_THREADS": os.cpu_count(),
         "ANNEAL_LR": True,
         "DEBUG": True,
     }
     rng = jax.random.PRNGKey(30)
     train_jit = jax.jit(make_train(config))
-
     out = jax.block_until_ready(train_jit(rng))
-
-    start = time.perf_counter()
-    out = jax.block_until_ready(train_jit(rng))
-    elapsed = time.perf_counter() - start
-
-    total_steps = config["NUM_UPDATES"] * config["NUM_STEPS"] * config["NUM_ENVS"]
-    print(f"SPS: {total_steps / elapsed:,.0f} ({total_steps:,} steps in {elapsed:.2f}s)")

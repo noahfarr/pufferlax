@@ -20,7 +20,7 @@ git clone --recurse-submodules git@github.com:noahfarr/pufferlax.git
 cd pufferlax
 uv sync --group build
 
-cd vendor/pufferlib && uv run --project .. bash build.sh craftax --cpu
+cd vendor/pufferlib && uv run --project .. bash build.sh breakout --cpu
 ```
 
 PufferLib 4.x links a single `pufferlib._C` extension to one env at build time,
@@ -37,9 +37,17 @@ compiled PufferLib-Ocean `_C` extension, then `make` it:
 import jax
 import pufferlax
 
-pufferlax.register("craftax", "pufferlib")
+pufferlax.register("breakout", "pufferlib")
 
-env, params = pufferlax.make("craftax", batch_shape=(8,), num_threads=4)
+env, params = pufferlax.make(
+    "breakout",
+    batch_shape=(8,),
+    num_threads=4,
+    frameskip=4, width=576, height=330,
+    paddle_width=62, paddle_height=8, ball_width=32, ball_height=32,
+    brick_width=32, brick_height=12, brick_rows=6, brick_cols=18,
+    initial_ball_speed=256, max_ball_speed=448, paddle_speed=620, continuous=0,
+)
 
 key = jax.random.PRNGKey(0)
 obs, state = jax.vmap(env.reset)(jax.random.split(key, env.num_envs))
@@ -49,19 +57,22 @@ obs, state, reward, done, info = jax.vmap(env.step)(
 )
 ```
 
+Extra keyword args to `make` are forwarded to the C env as its config; the keys
+an Ocean env needs are listed in pufferlib's `config/<env>.ini`.
+
 See [`examples/`](examples/) for more:
 
 - [`rollout.py`](examples/rollout.py) — a `jit`+`lax.scan` random rollout.
-- [`ppo.py`](examples/ppo.py) — end-to-end PPO (adapted from
+- [`ppo_breakout.py`](examples/ppo_breakout.py) — end-to-end PPO (adapted from
   [purejaxrl](https://github.com/luchris429/purejaxrl)) training on a pufferlax
   env pool, reporting episodic return and steps-per-second.
 
 The PPO example needs a few extra packages (`distrax`, `flax`, `optax`); install
-them with the `examples` dependency group, then run it:
+them with the `examples` extra, then run it:
 
 ```bash
-uv sync --group examples
-uv run python examples/ppo.py
+uv sync --extra examples
+uv run python examples/ppo_breakout.py
 ```
 
 ## How it works

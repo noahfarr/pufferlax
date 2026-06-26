@@ -5,10 +5,18 @@ description = "A JAX/gymnax wrapper for PufferLib-Ocean (C) vectorized environme
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "jax>=0.4.34",
+    "jax[cuda12]>=0.10.0 ; sys_platform == 'linux'",
+    "jax>=0.10.0 ; sys_platform == 'darwin'",
     "numpy",
     "gymnax>=0.0.8",
     "pufferlib",
+]
+
+[project.optional-dependencies]
+examples = [
+    "distrax>=0.1.9",
+    "flax>=0.12.7",
+    "optax>=0.2.8",
 ]
 
 [tool.uv.sources]
@@ -16,11 +24,6 @@ pufferlib = { path = "vendor/pufferlib", editable = true }
 
 [dependency-groups]
 build = ["pybind11"]
-examples = [
-    "distrax>=0.1.9",
-    "flax>=0.12.7",
-    "optax>=0.2.8",
-]
 
 [build-system]
 requires = ["hatchling"]
