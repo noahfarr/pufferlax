@@ -20,7 +20,7 @@ git clone --recurse-submodules git@github.com:noahfarr/pufferlax.git
 cd pufferlax
 uv sync --group build
 
-cd vendor/pufferlib && uv run --project .. bash build.sh breakout --cpu
+cd vendor/pufferlib && uv run --project .. bash build.sh craftax --cpu
 ```
 
 PufferLib 4.x links a single `pufferlib._C` extension to one env at build time,
@@ -37,17 +37,9 @@ compiled PufferLib-Ocean `_C` extension, then `make` it:
 import jax
 import pufferlax
 
-pufferlax.register("breakout", "pufferlib")
+pufferlax.register("craftax", "pufferlib")
 
-env, params = pufferlax.make(
-    "breakout",
-    batch_shape=(8,),
-    num_threads=4,
-    frameskip=4, width=576, height=330,
-    paddle_width=62, paddle_height=8, ball_width=32, ball_height=32,
-    brick_width=32, brick_height=12, brick_rows=6, brick_cols=18,
-    initial_ball_speed=256, max_ball_speed=448, paddle_speed=620, continuous=0,
-)
+env, params = pufferlax.make("craftax", batch_shape=(8,), num_threads=4)
 
 key = jax.random.PRNGKey(0)
 obs, state = jax.vmap(env.reset)(jax.random.split(key, env.num_envs))
