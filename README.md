@@ -1,6 +1,6 @@
 # pufferlax
 
-A thin **JAX / [gymnax](https://github.com/RobertTLange/gymnax)** wrapper for
+A thin **JAX** wrapper for
 [PufferLib](https://github.com/PufferAI/PufferLib)-Ocean (C) vectorized
 environments.
 
