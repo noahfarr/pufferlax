@@ -1,9 +1,7 @@
-from .environment import PufferLibEnv, PufferLibState, load_C, make, register
+from .environment import PufferLibEnv, PufferLibState, make
 
 __all__ = [
     "PufferLibEnv",
     "PufferLibState",
     "make",
-    "register",
-    "load_C",
 ]

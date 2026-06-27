@@ -20,9 +20,6 @@ examples = [
 [tool.uv.sources]
 pufferlib = { path = "vendor/pufferlib", editable = true }
 
-[dependency-groups]
-build = ["pybind11"]
-
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

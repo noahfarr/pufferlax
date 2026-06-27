@@ -1,7 +1,15 @@
 #include <cstdint>
 #include <cstdlib>
-#include <cuda_runtime.h>
 #include "xla/ffi/api/ffi.h"
+
+extern "C" {
+typedef struct CUstream_st* cudaStream_t;
+enum cudaMemcpyKind { cudaMemcpyHostToDevice = 1, cudaMemcpyDeviceToHost = 2 };
+int cudaSetDevice(int device);
+int cudaMemcpyAsync(void* destination, const void* source, size_t count,
+                    cudaMemcpyKind kind, cudaStream_t stream);
+int cudaStreamSynchronize(cudaStream_t stream);
+}
 
 namespace ffi = xla::ffi;
 
@@ -42,7 +50,7 @@ typedef struct StaticVec {
     cudaStream_t* streams;
     StaticThreading* threading;
     int observation_size;
-    int num_actions;
+    int num_action_components;
     int action_mask_size;
     int gpu;
     int* agent_permutation;
@@ -54,6 +62,7 @@ void static_vec_reset(StaticVec* vec);
 void static_vec_close(StaticVec* vec);
 void cpu_vec_step(StaticVec* vec);
 size_t get_obs_elem_size(void);
+int* get_act_sizes(void);
 
 }
 
@@ -72,11 +81,12 @@ static inline void dict_set(Dict* dict, const char* key, double value) {
 
 extern "C" {
 
-void* puffer_create(int total_agents, double seed_offset, double reset_pool_size) {
+void* puffer_create(int total_agents, int num_threads, double seed_offset, double reset_pool_size) {
     cudaSetDevice(0);
     Dict* vec_kwargs = make_dict(4);
     dict_set(vec_kwargs, "total_agents", (double)total_agents);
     dict_set(vec_kwargs, "num_buffers", 1.0);
+    dict_set(vec_kwargs, "num_threads", (double)num_threads);
     Dict* env_kwargs = make_dict(4);
     dict_set(env_kwargs, "seed_offset", seed_offset);
     dict_set(env_kwargs, "reset_pool_size", reset_pool_size);
@@ -93,8 +103,8 @@ int puffer_observation_size(void* handle) {
     return ((StaticVec*)handle)->observation_size;
 }
 
-int puffer_num_actions(void* handle) {
-    return ((StaticVec*)handle)->num_actions;
+int puffer_num_actions(void*) {
+    return get_act_sizes()[0];
 }
 
 int puffer_total_agents(void* handle) {
@@ -117,7 +127,7 @@ static ffi::Error step(
     StaticVec* vec = reinterpret_cast<StaticVec*>(static_cast<uintptr_t>(env_handle));
     const int num_agents = vec->total_agents;
     const size_t observation_bytes = (size_t)num_agents * vec->observation_size * sizeof(float);
-    const size_t action_bytes = (size_t)num_agents * vec->num_actions * sizeof(float);
+    const size_t action_bytes = (size_t)num_agents * vec->num_action_components * sizeof(float);
 
     cudaMemcpyAsync(vec->actions, actions.typed_data(), action_bytes,
                     cudaMemcpyDeviceToHost, stream);

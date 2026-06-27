@@ -1,6 +1,4 @@
 import ctypes
-import importlib
-import warnings
 
 import jax
 import jax.numpy as jnp
@@ -8,23 +6,40 @@ import numpy as np
 from flax import struct
 from gymnax.environments import environment, spaces
 
-REGISTRY: dict[str, str] = {}
+from . import build_ffi
+
+_REGISTERED: set[str] = set()
 
 
-def register(env_name: str, module_path: str) -> None:
-    REGISTRY[env_name] = module_path
-
-
-def load_C(env_name: str):
-    if env_name not in REGISTRY:
-        raise ValueError(
-            f"{env_name!r} is not registered; known: {sorted(REGISTRY)}. "
-            "Call pufferlax.register(env_name, module_path) first."
+def _load(env_name: str):
+    library_path = build_ffi.HERE / f"ffi_{env_name}.so"
+    if not library_path.exists():
+        library_path = build_ffi.build(env_name)
+    library = ctypes.CDLL(str(library_path))
+    library.puffer_create.restype = ctypes.c_void_p
+    library.puffer_create.argtypes = [
+        ctypes.c_int, ctypes.c_int, ctypes.c_double, ctypes.c_double
+    ]
+    library.puffer_close.argtypes = [ctypes.c_void_p]
+    library.puffer_observation_size.restype = ctypes.c_int
+    library.puffer_observation_size.argtypes = [ctypes.c_void_p]
+    library.puffer_num_actions.restype = ctypes.c_int
+    library.puffer_num_actions.argtypes = [ctypes.c_void_p]
+    if env_name not in _REGISTERED:
+        jax.ffi.register_ffi_target(
+            f"puffer_step_{env_name}",
+            jax.ffi.pycapsule(library.PufferStep),
+            platform="CUDA",
+            api_version=1,
         )
-    importlib.import_module(f"{REGISTRY[env_name]}._C")
-    module = importlib.import_module(REGISTRY[env_name])
-    assert hasattr(module, "_C")
-    return module._C
+        jax.ffi.register_ffi_target(
+            f"puffer_reset_{env_name}",
+            jax.ffi.pycapsule(library.PufferReset),
+            platform="CUDA",
+            api_version=1,
+        )
+        _REGISTERED.add(env_name)
+    return library
 
 
 @struct.dataclass
@@ -33,49 +48,26 @@ class PufferLibState(environment.EnvState):
 
 
 class PufferLibEnv(environment.Environment):
-    def __init__(self, C, batch_shape=(1,), num_threads: int = 16, **env_kwargs):
+    def __init__(
+        self,
+        env_name: str = "craftax",
+        batch_shape=(1,),
+        num_threads: int = 16,
+        seed_offset: int = 0,
+        reset_pool_size: int = 0,
+    ):
         super().__init__()
-        self._C = C
-        self.env_name = C.env_name
+        self.env_name = env_name
         self.batch_shape = tuple(batch_shape)
         self.num_envs = int(np.prod(self.batch_shape))
-
-        if len(self.batch_shape) > 1:
-            warnings.warn(
-                f"PufferLibEnv batch_shape={self.batch_shape} treats leading axes as "
-                "one env pool sharing a single C vec env and its RNG, so "
-                "sub-batches are not independently seeded.",
-                stacklevel=2,
-            )
-
-        self.vec = C.create_vec(
-            {
-                "vec": {
-                    "total_agents": self.num_envs,
-                    "num_buffers": 1,
-                    "num_threads": int(num_threads),
-                },
-                "env": dict(env_kwargs),
-            },
-            0,
+        self._library = _load(env_name)
+        self._handle = self._library.puffer_create(
+            self.num_envs, int(num_threads), float(seed_offset), float(reset_pool_size)
         )
-        self.obs_size = int(self.vec.obs_size)
-        self._num_actions, *_ = self.vec.act_sizes
+        self.obs_size = int(self._library.puffer_observation_size(self._handle))
+        self._num_actions = int(self._library.puffer_num_actions(self._handle))
         self.obs_shape = (self.obs_size,)
         self.obs_dtype = jnp.float32
-
-        self._obs = self._view(self.vec.obs_ptr, self.num_envs * self.obs_size).reshape(
-            self.num_envs, self.obs_size
-        )
-        self._rewards = self._view(self.vec.rewards_ptr, self.num_envs)
-        self._terminals = self._view(self.vec.terminals_ptr, self.num_envs)
-        self._actions = np.zeros(self.num_envs, dtype=np.float32)
-
-        self.vec.reset()
-
-    @staticmethod
-    def _view(ptr: int, count: int) -> np.ndarray:
-        return np.ctypeslib.as_array((ctypes.c_float * count).from_address(ptr))
 
     @property
     def name(self) -> str:
@@ -104,55 +96,42 @@ class PufferLibEnv(environment.Environment):
         return self.step_env(key, state, action, params)
 
     def reset_env(self, key, params=None):
-        def _reset(key):
-            self.vec.reset()
-            return jnp.asarray(
-                self._obs.reshape(self.batch_shape + self.obs_shape),
-                dtype=self.obs_dtype,
-            )
-
-        obs = jax.pure_callback(
-            _reset,
+        seed = jax.random.bits(key).astype(jnp.float32)
+        obs = jax.ffi.ffi_call(
+            f"puffer_reset_{self.env_name}",
             jax.ShapeDtypeStruct(self.obs_shape, self.obs_dtype),
-            key,
+            has_side_effect=True,
             vmap_method="broadcast_all",
-        )
+        )(seed, env_handle=np.int64(self._handle))
         return obs, PufferLibState(time=0)
 
     def step_env(self, key, state, action, params=None):
-        def _step(action):
-            self._actions[:] = np.asarray(action, dtype=np.float32).reshape(-1)
-            self.vec.cpu_step(self._actions.ctypes.data)
-            return (
-                jnp.asarray(
-                    self._obs.reshape(self.batch_shape + self.obs_shape),
-                    dtype=self.obs_dtype,
-                ),
-                jnp.asarray(self._rewards.reshape(self.batch_shape), dtype=jnp.float32),
-                jnp.asarray(
-                    self._terminals.reshape(self.batch_shape) > 0.5, dtype=jnp.bool_
-                ),
-            )
-
-        result_specs = (
+        result = (
             jax.ShapeDtypeStruct(self.obs_shape, self.obs_dtype),
             jax.ShapeDtypeStruct((), jnp.float32),
-            jax.ShapeDtypeStruct((), jnp.bool_),
+            jax.ShapeDtypeStruct((), jnp.float32),
         )
-        obs, reward, done = jax.pure_callback(
-            _step, result_specs, action, vmap_method="broadcast_all"
-        )
-        return obs, PufferLibState(time=state.time + 1), reward, done, {}
+        obs, reward, terminal = jax.ffi.ffi_call(
+            f"puffer_step_{self.env_name}",
+            result,
+            has_side_effect=True,
+            vmap_method="broadcast_all",
+        )(action.astype(jnp.float32), env_handle=np.int64(self._handle))
+        return obs, PufferLibState(time=state.time + 1), reward, terminal > 0.5, {}
 
 
 def make(
-    env_name: str = "craftax", batch_shape=(1,), num_threads: int = 16, **env_kwargs
+    env_name: str = "craftax",
+    batch_shape=(1,),
+    num_threads: int = 16,
+    seed_offset: int = 0,
+    reset_pool_size: int = 0,
 ):
-    C = load_C(env_name)
-    if C.env_name != env_name:
-        raise RuntimeError(
-            f"{REGISTRY[env_name]}._C is compiled for {C.env_name!r}, "
-            f"expected {env_name!r}."
-        )
-    env = PufferLibEnv(C, batch_shape=batch_shape, num_threads=num_threads, **env_kwargs)
+    env = PufferLibEnv(
+        env_name,
+        batch_shape=batch_shape,
+        num_threads=num_threads,
+        seed_offset=seed_offset,
+        reset_pool_size=reset_pool_size,
+    )
     return env, env.default_params

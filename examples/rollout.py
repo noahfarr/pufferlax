@@ -10,7 +10,6 @@ import tqdx.rich
 
 import pufferlax
 
-pufferlax.register("craftax", "pufferlib")
 env, params = pufferlax.make(
     "craftax",
     batch_shape=(4096,),
