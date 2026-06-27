@@ -1,6 +1,4 @@
 #!/bin/bash
-# Build the pufferlax GPU FFI for one env (default: craftax), linking the env
-# from vendored pufferlib sources (read-only). pufferlib is never modified.
 set -euo pipefail
 
 ENV_NAME="${1:-craftax}"
@@ -24,13 +22,13 @@ ar rcs "$HERE/build/libstatic_${ENV_NAME}.a" "$HERE/build/libstatic_${ENV_NAME}.
 echo "[2/3] FFI handler (nvcc, host C++17, $ARCH)"
 "$CUDA_HOME/bin/nvcc" -c -std=c++17 -arch="$ARCH" -O2 -Xcompiler -fPIC \
     -I"$FFI_INC" -I"$CUDA_HOME/include" \
-    "$HERE/puffer_ffi.cu" -o "$HERE/build/puffer_ffi.o"
+    "$HERE/ffi.cu" -o "$HERE/build/ffi.o"
 
-echo "[3/3] link puffer_ffi_${ENV_NAME}.so"
+echo "[3/3] link ffi_${ENV_NAME}.so"
 g++ -shared -fPIC -fopenmp \
-    "$HERE/build/puffer_ffi.o" "$HERE/build/libstatic_${ENV_NAME}.a" \
+    "$HERE/build/ffi.o" "$HERE/build/libstatic_${ENV_NAME}.a" \
     "$PUF/$RAYLIB/lib/libraylib.a" \
     -L"$CUDA_HOME/lib64" -lcudart -lomp5 -O2 -Bsymbolic-functions \
-    -o "$HERE/puffer_ffi_${ENV_NAME}.so"
+    -o "$HERE/ffi_${ENV_NAME}.so"
 
-echo "OK -> $HERE/puffer_ffi_${ENV_NAME}.so"
+echo "OK -> $HERE/ffi_${ENV_NAME}.so"
