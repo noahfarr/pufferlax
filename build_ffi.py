@@ -5,8 +5,9 @@ from pathlib import Path
 
 import jax
 
-HERE = Path(__file__).resolve().parent
-PUFFERLIB = HERE.parent / "vendor" / "pufferlib"
+ROOT = Path(__file__).resolve().parent
+PACKAGE = ROOT / "pufferlax"
+PUFFERLIB = ROOT / "vendor" / "pufferlib"
 RAYLIB = "raylib-5.5_linux_amd64"
 
 
@@ -21,8 +22,8 @@ def cudart():
 
 
 def build(env_name="craftax"):
-    out = HERE / f"ffi_{env_name}.so"
-    build_dir = HERE / "build"
+    out = PACKAGE / f"ffi_{env_name}.so"
+    build_dir = PACKAGE / "build"
     build_dir.mkdir(exist_ok=True)
     raylib = PUFFERLIB / RAYLIB
     cuda_lib, cuda_soname = cudart()
@@ -43,7 +44,7 @@ def build(env_name="craftax"):
     subprocess.run(["ar", "rcs", str(archive), str(env_object)], check=True)
     subprocess.run(
         ["g++", "-c", "-O2", "-std=c++17", "-x", "c++", "-fPIC",
-         f"-I{jax.ffi.include_dir()}", str(HERE / "ffi.cu"), "-o", str(handler_object)],
+         f"-I{jax.ffi.include_dir()}", str(PACKAGE / "ffi.cu"), "-o", str(handler_object)],
         check=True,
     )
     subprocess.run(

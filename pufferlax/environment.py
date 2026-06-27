@@ -1,4 +1,7 @@
 import ctypes
+import subprocess
+import sys
+from pathlib import Path
 
 import jax
 import jax.numpy as jnp
@@ -6,15 +9,15 @@ import numpy as np
 from flax import struct
 from gymnax.environments import environment, spaces
 
-from . import build_ffi
-
+_PACKAGE = Path(__file__).resolve().parent
+_BUILD_SCRIPT = _PACKAGE.parent / "build_ffi.py"
 _REGISTERED: set[str] = set()
 
 
 def _load(env_name: str):
-    library_path = build_ffi.HERE / f"ffi_{env_name}.so"
+    library_path = _PACKAGE / f"ffi_{env_name}.so"
     if not library_path.exists():
-        library_path = build_ffi.build(env_name)
+        subprocess.run([sys.executable, str(_BUILD_SCRIPT), env_name], check=True)
     library = ctypes.CDLL(str(library_path))
     library.puffer_create.restype = ctypes.c_void_p
     library.puffer_create.argtypes = [

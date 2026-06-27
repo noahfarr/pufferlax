@@ -21,7 +21,7 @@ uv sync
 ```
 
 The per-env FFI library is built on first use, or explicitly with
-`python -m pufferlax.build_ffi craftax`. The build needs only `g++` and the CUDA
+`python build_ffi.py craftax`. The build needs only `g++` and the CUDA
 runtime that ships with `jax[cuda12]` — no CUDA toolkit or `nvcc` — so it also
 runs on a login node with no GPU. A CUDA GPU is required at run time: the env
 step is an FFI custom call registered on the CUDA platform.
